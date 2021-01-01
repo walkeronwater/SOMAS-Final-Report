@@ -108,3 +108,93 @@ For elections of roles, the sequence of actions of the voting protocol is mostly
 At the start of the game, it is assumed that all 6 islands have the power to vote at any necessary voting scenario, and no diplomatic sanction is in place for any island. However, in the further turns of the game, some island(s) could lose their right to vote and/or not permitted to participate in a voting event due to the diplomatic sanction(s) in place. Refer to Chapter 5 IIGO for details on diplomatic sanction. In this case, the Speaker will open the ballots to the eligible islands only , i.e. those who are permitted to vote at a certain state of the game.
 
 % Implmentaion section deleted
+
+\section{Implementation}
+\label{sec:Implementation}
+
+\subsection{Voting for Rules}
+\label{sec:VotingForRules}
+The implementation of voting for rules from infrastructure point of view (file:\texttt{rulevote.go}) basically follows the sequence of voting protocol as described in Section~\ref{sec:VotingProtocol}. At initialisation, there are two defined structs (collection of data fields) that are used as parameters for functions inside the voting algorithm, such as \texttt{RuleVote} and \texttt{BallotBox}. The \texttt{RuleVote} struct consists of 3 variables, i.e. \texttt{ruleToVote} (string) that contains the rule that has been selected by the President to be voted on, \texttt{islandsToVote} (list of integers) that contains a list of \texttt{ClientID} which indicates all eligible islands that participate in the voting session, and \texttt{ballots} (list of boolean) that contains the vote of each respective eligible islands where it can indicate the vote for in-favour or against the proposed rule. The \texttt{BallotBox} struct consists of 2 integer variables that act as accumulators for the count of each possible vote: \texttt{VotesInFavour} and \texttt{VotesAgainst}.
+
+According to Section~\ref{sec:VotingProtocol}, The Speaker firstly starts a voting session by calling \texttt{SetRule(rule)} function that contains the rule selected by The President to be voted on. Next, the Speaker sets all eligible islands that can participate/have the right to vote in the voting session at that state of the game by using \texttt{SetVotingIslands(clientIDs[])} function. After that, the Speaker opens the ballots to get the votes from all eligible islands by calling \texttt{GatherBallots(clientMap[ClientID])} function. Subsequently, the \texttt{GetBallotBox()} function is called by the Speaker to gather the ballots that already contain the votes counting of those who are in-favour or against the proposed rule. Finally, the votes counting is concluded by comparing the votes of those in-favour vs those against, and the in-favour votes win when the counting is greater than or equal to the against votes counting, as reflected in \texttt{CountVotesMajority()} function. The Speaker then uses this result to declare the result of this voting session in IIGO.
+
+\subsection{Elections}
+\label{subsec:Elections}
+The elections for roles implementation can be seen in the file:\texttt{election.go}. At initialisation, there is a defined struct \texttt{Election} that contains 4 parameters, i.e. \texttt{roleToElect} that indicates which role is being voted on (President, or Speaker, or Judge), \texttt{votingMethod} that indicates the voting method being used for the election to determine the winner selection, \texttt{islandsToVote} that contains a list of \texttt{ClientID} which indicates all eligible islands that participate in the voting session, and \texttt{votes} that is a list that contains the order rank of preference of the candidates for the role from each eligible island who casts the vote.
+
+The election session begins by calling the \texttt{ProposeElection(role,method)} function that depends on which role being voted on and which role has obligation to facilitate the election (refer to Chapter 5 IIGO on Change of Roles and Power Transfer sections), and the selected voting method to be used for this election (refer to Section~\ref{sec:VotingMethods} for details on voting methods and Subsection~\ref{subsec:VotingPseudo} for pseudo-code implementation). The election facilitator then opens ballots to all eligible islands to cast their votes by calling \texttt{OpenBallot(clientIDs[])} function. The \texttt{Vote(clientMap[ClientID])} function gathers all the ballots containing the votes from all eligible islands that are obtained from \texttt{GetVoteForElection(roleToElect)} function returned from each client/island code execution. After that, the election facilitator closes the ballots by using \texttt{CloseBallot()} function and it returns the result of the votes counting using the selected voting method by calling each respective voting method function. This result is used by the election facilitator to declare the winner for the elected role. By default, the voting method for election is Borda Count and the function is called \texttt{bordaCountResult()} where the algorithm follows through what are explained in Section~\ref{sec:VotingMethods} and Subsection~\ref{subsec:VotingPseudo} where the Borda scores will be calculated based on the order rank of preference of the candidates from each ballot. The other voting methods can be used for election and it is selected by the election facilitator.
+
+\subsection{Voting Methods Implementation Pseudo-code}
+\label{subsec:VotingPseudo}
+
+\textbf{Plurality}
+\newline
+Call for Voting inputs (int:IslandID, str:"Aye", "Nay" or "Abstain")\\
+\begin{algorithm}[H]
+\ForEach{$ballot \in ballots $}{
+    \If{$Aye$} {Count for $Aye ++ $}
+    \If{$Nay$} {Count for $Nay ++ $}
+}
+\If{$Aye > Nay$}{\Return the Winner: $Aye$}
+\Else{\Return the Winner: $Nay$}
+\end{algorithm}
+
+\ \newline \ \newline \ \newline
+\textbf{Borda Count}
+\newline
+\begin{algorithm}[H]
+\For{all ballot}{
+    $numNotIn\gets N-ballot.length$\\
+    $shareScore\gets 1+...+numNotIn$\\
+    \For{i from 0 to N-1}{
+    \If{i is in ballots} {$scores[i]\gets scores[i]+N-K+1$ }
+    \Else {$scores[i]\gets scores[i]+shareScore/numsNotIn$ }
+    }
+}
+Sort candidates by Borda scores\\
+\Return the candidate with the highest score
+\end{algorithm}
+
+\ \newline \ \newline \ \newline
+\textbf{Runoff}
+\newline
+\begin{algorithm}[H]
+\For{All $ballot \in ballots $}{
+    Select two candidates with most first-placed votes
+}
+\If{either already has a majority}{
+\Return the majority one}
+\Else{Each voter selects one candidate of the top 2\\
+}
+\Return the candidate with the most votes
+\end{algorithm}
+
+\ \newline \ \newline \ \newline
+\textbf{Instant Runoff}
+\newline
+\begin{algorithm}[H]
+\ForEach{$ballot \in ballots $}{
+\For{i from 0 to N-1}{
+\If{i is first choice}{$scores[i]\gets scores[i]+N-K+1$}
+}
+}
+\If{candidate in ballots $>1$}{
+Remove the candidate with the fewest first
+choice votes from the ballots.\\
+GOTO the top for next round of counting
+}
+\Else{\Return the candidate}
+\end{algorithm} 
+
+\ \newline \ \newline \ \newline
+\textbf{Approval}\\
+\begin{algorithm}[H]
+\ForEach{$ballot \in ballots $}{
+    \For{i from 0 to N-1}{
+    \If{i is in ballot} {$scores[i]\gets scores[i]+1$ }
+    }
+
+}
+Sort candidates by scores\\
+\Return the candidate with highest score
+\end{algorithm}
